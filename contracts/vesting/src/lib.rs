@@ -2329,6 +2329,65 @@ mod tests {
         assert_eq!(token_client.balance(&beneficiary), 100_000);
     }
 
+    // ── Issue #64: minimum viable amount (total_amount = 1) ─────────────────
+    //
+    // The vesting formula uses integer division:
+    //   vested = elapsed * total_amount / total_duration
+    // With total_amount = 1 and total_duration = 100, the result is 0 for all
+    // elapsed < 100 and 1 only at elapsed >= 100.  This tests that rounding
+    // behaviour is correct and documents the "dust accumulates until end"
+    // property.
+
+    #[test]
+    fn test_create_schedule_minimum_amount() {
+        let (env, vesting_id, _admin, beneficiary, funder) = setup();
+        // Mint exactly 1 token.
+        let token = new_token(&env, &funder, 1);
+        let vesting = VestingContractClient::new(&env, &vesting_id);
+        let start = env.ledger().timestamp();
+
+        let id = vesting.create_schedule(&CreateScheduleParams {
+            from: funder.clone(),
+            beneficiary: beneficiary.clone(),
+            token_address: token.clone(),
+            total_amount: 1,
+            start_time: start,
+            cliff_duration: 0, // no cliff — immediate linear vesting
+            total_duration: 100,
+        });
+
+        // At t = start + 50 (midpoint): integer division rounds down.
+        // elapsed(50) * 1 / 100 == 0  →  0 claimable.
+        // This is the documented "dust" behaviour: fractional remainders
+        // accumulate and are only released at elapsed >= total_duration.
+        env.ledger().with_mut(|l| l.timestamp = start + 50);
+        assert_eq!(
+            vesting.get_claimable(&id),
+            0,
+            "expected 0 claimable at midpoint due to integer-division rounding"
+        );
+
+        // At t = start + 100 (full duration): elapsed >= total_duration branch
+        // returns total_amount directly, so exactly 1 is claimable.
+        env.ledger().with_mut(|l| l.timestamp = start + 100);
+        assert_eq!(
+            vesting.get_claimable(&id),
+            1,
+            "expected exactly 1 claimable at full duration"
+        );
+
+        // Claim and verify the beneficiary receives exactly 1.
+        let claimed = vesting.claim(&id);
+        assert_eq!(claimed, 1, "beneficiary should receive exactly 1 token");
+
+        let token_client = soroban_sdk::token::Client::new(&env, &token);
+        assert_eq!(
+            token_client.balance(&beneficiary),
+            1,
+            "beneficiary balance should be exactly 1"
+        );
+    }
+
     // ── Overflow guards ───────────────────────────────────────────────────────
 
     /// create_schedule with start_time + total_duration overflowing u64 must
@@ -2350,6 +2409,142 @@ mod tests {
             cliff_duration: 0,
             total_duration: 1,
         });
+    }
+
+    // ── Issue #61: get_claimable() returns 0 for Completed schedules ─────────
+    //
+    // After fully claiming all tokens the schedule transitions to Completed.
+    // get_claimable() should resolve to (total_amount - total_amount).max(0) == 0.
+
+    #[test]
+    fn test_get_claimable_on_completed_schedule() {
+        let (env, vesting_id, _admin, beneficiary, funder) = setup();
+        let token = new_token(&env, &funder, 100_000);
+        let vesting = VestingContractClient::new(&env, &vesting_id);
+        let start = env.ledger().timestamp();
+
+        let id = vesting.create_schedule(&CreateScheduleParams {
+            from: funder.clone(),
+            beneficiary: beneficiary.clone(),
+            token_address: token,
+            total_amount: 100_000,
+            start_time: start,
+            cliff_duration: 0,
+            total_duration: 100,
+        });
+
+        // Advance past full duration and claim everything.
+        env.ledger().with_mut(|l| l.timestamp = start + 100);
+        let claimed = vesting.claim(&id);
+        assert_eq!(claimed, 100_000);
+
+        // Schedule is now Completed.
+        let sched = vesting.get_schedule(&id);
+        assert_eq!(sched.status, ScheduleStatus::Completed);
+
+        // get_claimable() must return 0 for a Completed schedule:
+        // vested_amount == total_amount, claimed_amount == total_amount,
+        // so (total_amount - total_amount).max(0) == 0.
+        assert_eq!(vesting.get_claimable(&id), 0);
+    }
+
+    // ── Issue #61: get_claimable() returns 0 for Revoked schedules ───────────
+    //
+    // After revoke() the vested-but-unclaimed portion is paid to the
+    // beneficiary and claimed_amount is set to vested_amount.  The unvested
+    // portion goes to the recipient.  vested_amount - claimed_amount == 0,
+    // so get_claimable() must return 0.
+
+    #[test]
+    fn test_get_claimable_on_revoked_schedule() {
+        let (env, vesting_id, admin, beneficiary, funder) = setup();
+        let token = new_token(&env, &funder, 100_000);
+        let vesting = VestingContractClient::new(&env, &vesting_id);
+        let start = env.ledger().timestamp();
+
+        let id = vesting.create_schedule(&CreateScheduleParams {
+            from: funder.clone(),
+            beneficiary: beneficiary.clone(),
+            token_address: token,
+            total_amount: 100_000,
+            start_time: start,
+            cliff_duration: 0,
+            total_duration: 100,
+        });
+
+        // Revoke mid-vest at t=40: 40_000 vested, 60_000 unvested.
+        // revoke() pays 40_000 to beneficiary and returns 60_000 to admin.
+        env.ledger().with_mut(|l| l.timestamp = start + 40);
+        let returned = vesting.revoke(&id, &admin);
+        assert_eq!(returned, 60_000);
+
+        // Schedule is now Revoked.
+        let sched = vesting.get_schedule(&id);
+        assert_eq!(sched.status, ScheduleStatus::Revoked);
+
+        // get_claimable() must return 0 after revoke:
+        // claimed_amount was set to vested_amount (40_000) inside revoke(),
+        // so (40_000 - 40_000).max(0) == 0.
+        assert_eq!(vesting.get_claimable(&id), 0);
+    }
+
+    // ── Issue #64: minimum viable amount (total_amount = 1) ─────────────────
+    //
+    // The vesting formula uses integer division:
+    //   vested = elapsed * total_amount / total_duration
+    // With total_amount = 1 and total_duration = 100, the result is 0 for all
+    // elapsed < 100 and 1 only at elapsed >= 100.  This tests that rounding
+    // behaviour is correct and documents the "dust accumulates until end"
+    // property.
+
+    #[test]
+    fn test_create_schedule_minimum_amount() {
+        let (env, vesting_id, _admin, beneficiary, funder) = setup();
+        // Mint exactly 1 token.
+        let token = new_token(&env, &funder, 1);
+        let vesting = VestingContractClient::new(&env, &vesting_id);
+        let start = env.ledger().timestamp();
+
+        let id = vesting.create_schedule(&CreateScheduleParams {
+            from: funder.clone(),
+            beneficiary: beneficiary.clone(),
+            token_address: token.clone(),
+            total_amount: 1,
+            start_time: start,
+            cliff_duration: 0, // no cliff — immediate linear vesting
+            total_duration: 100,
+        });
+
+        // At t = start + 50 (midpoint): integer division rounds down.
+        // elapsed(50) * 1 / 100 == 0  →  0 claimable.
+        // This is the documented "dust" behaviour: fractional remainders
+        // accumulate and are only released at elapsed >= total_duration.
+        env.ledger().with_mut(|l| l.timestamp = start + 50);
+        assert_eq!(
+            vesting.get_claimable(&id),
+            0,
+            "expected 0 claimable at midpoint due to integer-division rounding"
+        );
+
+        // At t = start + 100 (full duration): elapsed >= total_duration branch
+        // returns total_amount directly, so exactly 1 is claimable.
+        env.ledger().with_mut(|l| l.timestamp = start + 100);
+        assert_eq!(
+            vesting.get_claimable(&id),
+            1,
+            "expected exactly 1 claimable at full duration"
+        );
+
+        // Claim and verify the beneficiary receives exactly 1.
+        let claimed = vesting.claim(&id);
+        assert_eq!(claimed, 1, "beneficiary should receive exactly 1 token");
+
+        let token_client = soroban_sdk::token::Client::new(&env, &token);
+        assert_eq!(
+            token_client.balance(&beneficiary),
+            1,
+            "beneficiary balance should be exactly 1"
+        );
     }
 
     /// create_schedule with start_time + cliff_duration overflowing u64 must

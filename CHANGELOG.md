@@ -7,17 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added — 2026-10-16
+### Tests — 2026-10-16
 
-- docs/faq.md: new FAQ document with 12 Q&A entries covering common
-  integration questions (#88). Topics include cliff + linear schedule
-  mechanics, integer-division rounding dust, pause semantics for `revoke()`,
-  why `execute()` is permissionless, how to use the multisig as the vesting
-  admin, the difference between `Completed` and `Revoked` statuses,
-  `extend_ttl()` usage, archived entry restoration, mainnet safety guidance,
-  `get_claimable()` on terminal schedules, and owner-set change governance.
-  All answers are grounded in the contract source code. README updated with a
-  **FAQ** section and direct link to `docs/faq.md`.
+- contracts/vesting/src/lib.rs: two new tests for `get_claimable()` on
+  terminal schedule statuses (#61).
+  - `test_get_claimable_on_completed_schedule`: fully vests and claims a
+    schedule, asserts status is `Completed`, then asserts
+    `get_claimable() == 0` (vested - claimed = 0).
+  - `test_get_claimable_on_revoked_schedule`: revokes a schedule mid-vest,
+    asserts status is `Revoked`, then asserts `get_claimable() == 0`
+    (revoke sets `claimed_amount = vested_amount` before transferring).
+
 
 
   event with payload `(old_admin: Address, new_admin: Address)` (#101).
