@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added — 2026-10-16
+### Tests — 2026-10-16
+
+- contracts/vesting/src/lib.rs: two new tests for `get_claimable()` on
+  terminal schedule statuses (#61).
+  - `test_get_claimable_on_completed_schedule`: fully vests and claims a
+    schedule, asserts status is `Completed`, then asserts
+    `get_claimable() == 0` (vested - claimed = 0).
+  - `test_get_claimable_on_revoked_schedule`: revokes a schedule mid-vest,
+    asserts status is `Revoked`, then asserts `get_claimable() == 0`
+    (revoke sets `claimed_amount = vested_amount` before transferring).
+
+
 
 - contracts/token/src/lib.rs: `transfer_admin()` now emits an `("admXfer",)`
   event with payload `(old_admin: Address, new_admin: Address)` (#101).
