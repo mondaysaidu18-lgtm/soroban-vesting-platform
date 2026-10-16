@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added — 2026-10-16
+### Tests — 2026-10-16
 
-- contracts/token/src/lib.rs: `transfer_admin()` now emits an `("admXfer",)`
+- contracts/multisig/src/lib.rs: `test_revoke_confirmation_without_confirming_panics`
+  (#69). Submits a proposal, skips `confirm()`, then calls
+  `revoke_confirmation()` directly — asserts it panics with `"not confirmed"`.
+  Covers the previously untested guard in `revoke_confirmation()` that reads
+  `DataKey::Confirm(proposal_id, owner)` and panics when the key is absent.
+  Existing tests only called `revoke_confirmation()` after a prior `confirm()`.
+
+
   event with payload `(old_admin: Address, new_admin: Address)` (#101).
   Added `EVT_ADM_XFER` constant (`symbol_short!("admXfer")`), matching the
   vesting contract's pattern for consistency. Off-chain systems monitoring admin

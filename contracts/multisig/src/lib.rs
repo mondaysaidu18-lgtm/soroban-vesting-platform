@@ -1467,6 +1467,32 @@ mod tests {
         ms.cancel(&o1, &id);
     }
 
+    // ── Issue #69: revoke_confirmation() without a prior confirm() panics ────
+    //
+    // revoke_confirmation() reads DataKey::Confirm(proposal_id, owner) and
+    // panics with "not confirmed" if the key is absent or false.
+    // This guard was implemented but not previously tested for the case where
+    // the caller has NEVER called confirm() at all.
+
+    #[test]
+    #[should_panic(expected = "not confirmed")]
+    fn test_revoke_confirmation_without_confirming_panics() {
+        let (env, contract_id, o1, o2, _o3) = setup_2of3();
+        let ms = MultisigContractClient::new(&env, &contract_id);
+        let stub_id = env.register(stub_token::StubToken, ());
+
+        // Submit a proposal — o1 is proposer but has NOT called confirm().
+        let id = ms.submit(
+            &o1,
+            &call_action(&env, &stub_id, symbol_short!("ping")),
+            &String::from_str(&env, "revoke without confirming"),
+        );
+
+        // o2 has also not confirmed. Calling revoke_confirmation() here must
+        // panic with "not confirmed" because no confirmation exists to revoke.
+        ms.revoke_confirmation(&o2, &id);
+    }
+
     #[test]
     fn test_revoke_drops_below_threshold_then_reconfirm_executes() {
         let (env, contract_id, o1, o2, _o3) = setup_2of3();
