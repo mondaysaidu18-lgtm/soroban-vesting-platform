@@ -7,9 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added — 2026-10-16
+### Tests — 2026-10-16
 
-- contracts/token/src/lib.rs: `transfer_admin()` now emits an `("admXfer",)`
+- contracts/vesting/src/lib.rs: `test_create_schedule_minimum_amount` (#64).
+  Creates a schedule with `total_amount = 1`, `cliff_duration = 0`,
+  `total_duration = 100`. Asserts `get_claimable() == 0` at the midpoint
+  (integer-division rounding truncates 0.5 to 0), `get_claimable() == 1` at
+  full duration (elapsed >= total_duration returns total_amount directly), and
+  that `claim()` returns exactly `1` with the beneficiary balance confirmed.
+  Documents the "dust accumulates until end" rounding behaviour in a code
+  comment on the test.
+
+
   event with payload `(old_admin: Address, new_admin: Address)` (#101).
   Added `EVT_ADM_XFER` constant (`symbol_short!("admXfer")`), matching the
   vesting contract's pattern for consistency. Off-chain systems monitoring admin
