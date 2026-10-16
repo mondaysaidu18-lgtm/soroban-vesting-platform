@@ -9,7 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added — 2026-10-16
 
-- contracts/token/src/lib.rs: `transfer_admin()` now emits an `("admXfer",)`
+- docs/faq.md: new FAQ document with 12 Q&A entries covering common
+  integration questions (#88). Topics include cliff + linear schedule
+  mechanics, integer-division rounding dust, pause semantics for `revoke()`,
+  why `execute()` is permissionless, how to use the multisig as the vesting
+  admin, the difference between `Completed` and `Revoked` statuses,
+  `extend_ttl()` usage, archived entry restoration, mainnet safety guidance,
+  `get_claimable()` on terminal schedules, and owner-set change governance.
+  All answers are grounded in the contract source code. README updated with a
+  **FAQ** section and direct link to `docs/faq.md`.
+
+
   event with payload `(old_admin: Address, new_admin: Address)` (#101).
   Added `EVT_ADM_XFER` constant (`symbol_short!("admXfer")`), matching the
   vesting contract's pattern for consistency. Off-chain systems monitoring admin
