@@ -9,14 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Tests — 2026-10-16
 
-- contracts/vesting/src/lib.rs: `test_create_schedule_minimum_amount` (#64).
-  Creates a schedule with `total_amount = 1`, `cliff_duration = 0`,
-  `total_duration = 100`. Asserts `get_claimable() == 0` at the midpoint
-  (integer-division rounding truncates 0.5 to 0), `get_claimable() == 1` at
-  full duration (elapsed >= total_duration returns total_amount directly), and
-  that `claim()` returns exactly `1` with the beneficiary balance confirmed.
-  Documents the "dust accumulates until end" rounding behaviour in a code
-  comment on the test.
+- contracts/vesting/src/lib.rs: two new tests for `get_claimable()` on
+  terminal schedule statuses (#61).
+  - `test_get_claimable_on_completed_schedule`: fully vests and claims a
+    schedule, asserts status is `Completed`, then asserts
+    `get_claimable() == 0` (vested - claimed = 0).
+  - `test_get_claimable_on_revoked_schedule`: revokes a schedule mid-vest,
+    asserts status is `Revoked`, then asserts `get_claimable() == 0`
+    (revoke sets `claimed_amount = vested_amount` before transferring).
+
 
 
   event with payload `(old_admin: Address, new_admin: Address)` (#101).
