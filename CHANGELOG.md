@@ -9,12 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Tests — 2026-10-16
 
-- contracts/multisig/src/lib.rs: `test_revoke_confirmation_without_confirming_panics`
-  (#69). Submits a proposal, skips `confirm()`, then calls
-  `revoke_confirmation()` directly — asserts it panics with `"not confirmed"`.
-  Covers the previously untested guard in `revoke_confirmation()` that reads
-  `DataKey::Confirm(proposal_id, owner)` and panics when the key is absent.
-  Existing tests only called `revoke_confirmation()` after a prior `confirm()`.
+- contracts/vesting/src/lib.rs: two new tests for `get_claimable()` on
+  terminal schedule statuses (#61).
+  - `test_get_claimable_on_completed_schedule`: fully vests and claims a
+    schedule, asserts status is `Completed`, then asserts
+    `get_claimable() == 0` (vested - claimed = 0).
+  - `test_get_claimable_on_revoked_schedule`: revokes a schedule mid-vest,
+    asserts status is `Revoked`, then asserts `get_claimable() == 0`
+    (revoke sets `claimed_amount = vested_amount` before transferring).
+
 
 
   event with payload `(old_admin: Address, new_admin: Address)` (#101).
